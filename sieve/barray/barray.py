@@ -70,10 +70,10 @@ class BArray(object):
 class Bloom(object):
     ''' Probabilistic set membership testing'''
 
-    def __init__(self, size=None, n=None, e=0.01):
+    def __init__(self, size=None, n=None, err=0.01):
         ''' `size` exact size in bytes for underlying bitarray, or calculate
-        from the estimated number of entries `n` and desired error rate `e` '''
-        self.size, self.num_hashes = self.calc_params(size, n, e)
+        from the estimated number of entries `n` and desired error rate `err` '''
+        self.size, self.num_hashes = self.calc_params(size, n, err)
         self.barray = BArray(self.size)
         self.added = 0
 
@@ -105,12 +105,12 @@ class Bloom(object):
         return all(self.barray.set(pos, 1) for pos in self._hasher(key))
 
     @staticmethod
-    def calc_params(size=None, n=None, e=None):
+    def calc_params(size=None, n=None, err=None):
         ''' Takes a size (in bits) or calculates one from the estimated
         number of entries `n` and the desired error rate `e` '''
         if size:
             return (size, 7)
-        size = math.ceil((-n * math.log(math.e)) / math.log(2) ** 2)
+        size = math.ceil((-n * math.log(err)) / math.log(2) ** 2)
         num_hashes = math.ceil((size / n) * math.log(2))
         return size, num_hashes
 
@@ -129,11 +129,11 @@ class Bloom(object):
 class CountingBloom(object):
     ''' Probabilistic set membership testing with count estimation '''
 
-    def __init__(self, size=None, n=None, e=0.01, bucketsize='B'):
+    def __init__(self, size=None, n=None, err=0.01, bucketsize='B'):
         ''' `size` exact number of buckets for underlying array, or calculate
-        from the estimated number of entries `n`, desired error rate `e`, and
+        from the estimated number of entries `n`, desired error rate `err`, and
         required bucket size `bucketsize` '''
-        self.size, self.num_hashes = self.calc_params(size, n, e)
+        self.size, self.num_hashes = self.calc_params(size, n, err)
         self.barray = array(bucketsize, [0]) * self.size
         self.bucketsize = 2 ** (8 * calcsize(bucketsize)) - 1
         self.added = 0
@@ -181,12 +181,12 @@ class CountingBloom(object):
         return bucketcount
 
     @staticmethod
-    def calc_params(size=None, n=None, e=None):
+    def calc_params(size=None, n=None, err=None):
         ''' Takes a size (in bits) or calculates one from the estimated
         number of entries `n` and the desired error rate `e` '''
         if size:
             return (size, 7)
-        size = math.ceil((-n * math.log(math.e)) / math.log(2) ** 2)
+        size = math.ceil((-n * math.log(err)) / math.log(2) ** 2)
         num_hashes = math.ceil((size / n) * math.log(2))
         return size, num_hashes
 
