@@ -1,9 +1,10 @@
-# GY171110
+# GY171113
 
-from math import log, ceil, e
+import math
 from array import array
+from struct import calcsize
 
-from sieve.barray.hashes import fnv1a_64, murmur2_64
+from sieve.barray.hashes import fnv1a_64
 
 
 __all__ = ['BArray', 'Bloom', 'CountingBloom']
@@ -14,7 +15,7 @@ class BArray(object):
 
     def __init__(self, size):
         self.size = size
-        self.barray = array('Q', [0]) * ceil(size / 64)
+        self.barray = array('Q', [0]) * math.ceil(size / 64)
 
     def __getitem__(self, index):
         word, bit = self._getindex(index)
@@ -41,9 +42,8 @@ class BArray(object):
             raise IndexError('Attempt to access out of bounds bit')
         return divmod(index, 64)
 
-    def precheckset(self, index, value=1):
-        ''' Checks if a bit is already set to value (returning True), else sets
-        the bit to value (returning False) '''
+    def set(self, index, value=1):
+        ''' Sets a bit, returning if already set the same as boolean '''
         word, bit = self._getindex(index)
         mask = 1 << bit
         current = self.barray[word] & mask
@@ -64,86 +64,61 @@ class BArray(object):
             i = (i & 0x3333333333333333) + ((i >> 2) & 0x3333333333333333)
             return ((((i + (i >> 4)) & 0x0f0f0f0f0f0f0f0f) * 0x0101010101010101) & 0xffffffffffffffff) >> 56
 
-        for word in self.barray:
-            print(_count(word))
-
         return sum(_count(word) for word in self.barray)
 
 
-def _bit_indeces(key, num_hashes, size):
-    ''' Compute the bit indeces of a key for k hash functions '''
-    h1, h2 = fnv1a_64(key), murmur2_64(key, 12345)
-    return [(h1+i*h2)%size for i in range(1, num_hashes+1)]
-
-
 class Bloom(object):
-    '''
-    Probabilistic set membership testing.
+    ''' Probabilistic set membership testing'''
 
-    mem is the RAM to be allocated to the bloom filter
-        (in the form '512K', '1.5M', '2G' etc)
-
-    ... or ...
-
-    n is the number of elements to be entered into the filter, and
-    p is the desired error rate of the filter
-
-    '''
-
-    def __init__(self, mem=None, n=None, p=0.01):
-        self.size, self.num_hashes = self.calc_params(mem, n, p)
+    def __init__(self, size=None, n=None, e=0.01):
+        ''' `size` exact size in bytes for underlying bitarray, or calculate
+        from the estimated number of entries `n` and desired error rate `e` '''
+        self.size, self.num_hashes = self.calc_params(size, n, e)
         self.barray = BArray(self.size)
         self.added = 0
-
-    def __repr__(self):
-        return 'Bloom(num_hashes={}, size={})'.format(self.num_hashes, self.size)
 
     def __len__(self):
         return self.size
 
     def __iadd__(self, key):
-        for bit in _bit_indeces(key, self.num_hashes, self.size):
-            self.barray[bit] = 1
+        for pos in self._hasher(key):
+            self.barray[pos] = 1
         self.added += 1
         return self
 
     def __contains__(self, key):
-        return all(self.barray[bit] for bit in _bit_indeces(key,
-            self.num_hashes, self.size))
+        return all(self.barray[pos] for pos in self._hasher(key))
+
+    def _hasher(self, key):
+        ''' Compute the bit indeces of a key for k hash functions, cheating by
+        using permutations of a single hash algorithm, as per Kirsch &
+        Mitzenmacher ... doi:10.1007/11841036_42 '''
+        key = tuple(ord(c) for c in key)
+        hash1 = fnv1a_64(key)
+        hash2 = fnv1a_64((hash1,) + key)
+        for i in range(self.num_hashes):
+            yield (hash1 + i * hash2) % self.size
+
+    def add(self, key):
+        ''' Add item to the filter, returning if already present as boolean '''
+        self.added += 1
+        return all(self.barray.set(pos, 1) for pos in self._hasher(key))
 
     @staticmethod
-    def calc_params(mem=None, n=None, p=0.01):
-        if mem:
-            if mem[-1] in ('K', 'k'):
-                mem = int(float(mem[:-1]) * 1024)
-            elif mem[-1] in ('M', 'm'):
-                mem = int(float(mem[:-1]) * 1024**2)
-            elif mem[-1] in ('G', 'g'):
-                mem = int(float(mem[:-1]) * 1024**3)
-            size = mem * 8
-            num_hashes = 7
-        elif n:
-            size = ceil((-n*log(p))/log(2)**2)
-            num_hashes = ceil((size/n)*log(2))
-        else:
-            pass #raise PySembler_BloomError('Either a memory limit (mem) or the number of members to be added (n) must be provided.')
+    def calc_params(size=None, n=None, e=None):
+        ''' Takes a size (in bits) or calculates one from the estimated
+        number of entries `n` and the desired error rate `e` '''
+        if size:
+            return (size, 7)
+        size = math.ceil((-n * math.log(math.e)) / math.log(2) ** 2)
+        num_hashes = math.ceil((size / n) * math.log(2))
         return size, num_hashes
-
-    def precheckadd(self, bits):
-        ''' Check if all bits corresponding to a key are already set, returning
-        True, otherwise set the bits and return False '''
-        changes = [self.barray.precheckset(bit, 1) for bit in \
-            _bit_indeces(key, self.num_hashes, self.size)]
-        self.added += 1
-        return all(changes)
 
     @property
     def collision_probability(self):
-        ''' Return an estimate of the collision probability for the next key
-        entered given the current number of insertions. As the filter fills and
-        dependent on the redundancy of the keys entered, this will increasingly
-        return an overestimate. '''
-        return (1-e**(-self.num_hashes*self.added/self.size))**self.num_hashes
+        ''' Return a current estimate of the collision probability '''
+        return (1 - math.e ** (-self.num_hashes * self.added / self.size)) ** \
+            self.num_hashes
 
     @property
     def bits_set(self):
@@ -152,80 +127,76 @@ class Bloom(object):
 
 
 class CountingBloom(object):
-    '''
-    Probabilistic set membership testing including the likely count of a
-    key within the set.
+    ''' Probabilistic set membership testing with count estimation '''
 
-    mem is the RAM to be allocated to the bloom filter
-        (in the form '512K', '1.5M', '2G' etc)
-
-    ... or ...
-
-    n is the number of elements to be entered into the filter, and
-    p is the desired error rate of the filter
-
-    '''
-
-    def __init__(self, mem=None, n=None, p=0.01):
-        self.barray = array('B')
-        if mem:
-            if mem[-1] in ('K', 'k'):
-                self.size = int(float(mem[:-1]) * 1024)
-            elif mem[-1] in ('M', 'm'):
-                self.size = int(float(mem[:-1]) * 1024**2)
-            elif mem[-1] in ('G', 'g'):
-                self.size = int(float(mem[:-1]) * 1024**3)
-            self.num_hashes = 7
-        elif n:
-            self.size = ceil((-n*log(p))/log(2)**2)
-            self.num_hashes = ceil((self.size/n)*log(2))
-        else:
-            pass #raise PySembler_BloomError('Either a memory limit (mem) or the number of members to be added (n) must be provided.')
-        self.barray = array('B', [0])*self.size
+    def __init__(self, size=None, n=None, e=0.01, bucketsize='B'):
+        ''' `size` exact number of buckets for underlying array, or calculate
+        from the estimated number of entries `n`, desired error rate `e`, and
+        required bucket size `bucketsize` '''
+        self.size, self.num_hashes = self.calc_params(size, n, e)
+        self.barray = array(bucketsize, [0]) * self.size
+        self.bucketsize = 2 ** (8 * calcsize(bucketsize)) - 1
         self.added = 0
-
-    def __repr__(self):
-        return 'Bloom(num_hashes={}, size={})'.format(self.num_hashes, self.size)
 
     def __len__(self):
         return self.size
 
-    def add(self, key):
-        ''' Increments bits in the bloom filter corresponding to a key.
-        Increments self.added to track the number of entries. '''
-        try:
-            for bucket in _bit_indeces(key, self.num_hashes, self.size):
-                self.barray[bucket] += 1
-        except OverflowError:
-            pass
+    def __iadd__(self, key):
+        for pos in self._hasher(key):
+            try:
+                self.barray[pos] += 1
+            except OverflowError:
+                pass
         self.added += 1
         return self
 
     def __contains__(self, key):
-        return min(self.barray[bucket] for bucket in _bit_indeces(key,
-            self.num_hashes, self.size))
-
-    def inc(self, buckets):
-        ''' Increments a pre-calculated iterable of buckets '''
-        for bucket in buckets:
-            self.barray[bucket] += 1
-        self.added += 1
+        return all(self.barray[pos] for pos in self._hasher(key))
 
     def __getitem__(self, key):
-        ''' Returns the likely number of times a key has been entered. Returns
-        0 (equates to False) if a key is not set. '''
-        return min(self.barray[bucket] for bucket in _bit_indeces(key,
-            self.num_hashes, self.size))
+        return min(self.barray[pos] for pos in self._hasher(key))
 
-    @property
-    def buckets_set(self):
-        ''' Return the number of set buckets in the filter '''
-        return sum([1 for i in self.barray if i])
+    def _hasher(self, key):
+        ''' Compute the bit indeces of a key for k hash functions, cheating by
+        using permutations of a single hash algorithm, as per Kirsch &
+        Mitzenmacher ... doi:10.1007/11841036_42 '''
+        key = tuple(ord(c) for c in key)
+        hash1 = fnv1a_64(key)
+        hash2 = fnv1a_64((hash1,) + key)
+        for i in range(self.num_hashes):
+            yield (hash1 + i * hash2) % self.size
+
+    def add(self, key):
+        ''' Add item to the filter, returning its new count '''
+        self.added += 1
+        count = self.bucketsize
+        try:
+            for bucket in self._hasher(key):
+                self.barray[bucket] += 1
+                bucketcount = self.barray[bucket]
+                if bucketcount < count:
+                    count = bucketcount
+        except OverflowError:
+            pass
+        return bucketcount
+
+    @staticmethod
+    def calc_params(size=None, n=None, e=None):
+        ''' Takes a size (in bits) or calculates one from the estimated
+        number of entries `n` and the desired error rate `e` '''
+        if size:
+            return (size, 7)
+        size = math.ceil((-n * math.log(math.e)) / math.log(2) ** 2)
+        num_hashes = math.ceil((size / n) * math.log(2))
+        return size, num_hashes
 
     @property
     def collision_probability(self):
-        ''' Return an estimate of the collision probability for the next key
-        entered given the current number of insertions. As the filter fills and
-        dependent on the redundancy of the keys entered, this will increasingly
-        return an overestimate. '''
-        return (1-e**(-self.num_hashes*self.added/self.size))**self.num_hashes
+        ''' Return a current estimate of the collision probability '''
+        return (1 - math.e ** (-self.num_hashes * self.added / self.size)) ** \
+            self.num_hashes
+
+    @property
+    def buckets_set(self):
+        ''' Return the number of set bits in the filter '''
+        return sum([i != 0 for i in self.barray])
