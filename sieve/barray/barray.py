@@ -92,7 +92,7 @@ class Bloom(object):
     ''' Probabilistic set membership testing'''
 
     def __init__(self, size=None, n=None, err=0.01):
-        ''' `size` exact size in bytes for underlying bitarray, or calculate
+        ''' `size` exact size in bits for underlying bitarray, or calculate
         from the estimated number of entries `n` and desired error rate `err` '''
         self.size, self.num_hashes = self.calc_params(size, n, err)
         self.barray = BArray(self.size)
@@ -123,7 +123,7 @@ class Bloom(object):
     def add(self, key):
         ''' Add item to the filter, returning if already present as boolean '''
         self.added += 1
-        return all(self.barray.set(pos, 1) for pos in self._hasher(key))
+        return all(self.barray.set(pos) for pos in self._hasher(key))
 
     @staticmethod
     def calc_params(size=None, n=None, err=None):
