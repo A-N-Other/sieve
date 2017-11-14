@@ -42,17 +42,38 @@ class BArray(object):
             raise IndexError('Attempt to access out of bounds bit')
         return divmod(index, 64)
 
-    def set(self, index, value=1):
-        ''' Sets a bit, returning if already set the same as boolean '''
+    def set(self, index):
+        ''' Sets a bit, returning if already set as boolean'''
         word, bit = self._getindex(index)
         mask = 1 << bit
-        current = self.barray[word] & mask
-        if (current and value) or (not current and not value):
+        if self.barray[word] & mask:
             return True
-        if value:
-            self.barray[word] |= mask
-        else:
-            self.barray[word] &= ~mask
+        self.barray[word] |= mask
+        return False
+
+    def unset(self, index):
+        ''' Unsets a bit, returning if already unset as boolean '''
+        word, bit = self._getindex(index)
+        mask = 1 << bit
+        if not self.barray[word] & mask:
+            return True
+        self.barray[word] &= ~mask
+        return False
+
+    def blockset(self, index, mask):
+        ''' Sets bits in a block, returning if already set as boolean '''
+        word, _ = self._getindex(index)
+        if (self.barray[word] & mask) == mask:
+            return True
+        self.barray[word] |= mask
+        return False
+
+    def blockunset(self, index, mask):
+        ''' Unsets bits in a block, returning if already unset as boolean '''
+        word, _ = self._getindex(index)
+        if not self.barray[word] & mask:
+            return True
+        self.barray[word] &= ~mask
         return False
 
     def count(self):
