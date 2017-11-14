@@ -1,4 +1,4 @@
-# GY171113
+# GY171114
 
 import math
 from array import array
@@ -154,7 +154,14 @@ class CountingBloom(object):
         return all(self.barray[pos] for pos in self._hasher(key))
 
     def __getitem__(self, key):
-        return min(self.barray[pos] for pos in self._hasher(key))
+        count = self.bucketsize
+        for pos in self._hasher(key):
+            current = self.barray[pos]
+            if current == 0:
+                return 0
+            if current < count:
+                count = current
+        return count
 
     def _hasher(self, key):
         ''' Compute the bit indeces of a key for k hash functions, cheating by
