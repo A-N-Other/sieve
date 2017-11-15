@@ -92,10 +92,9 @@ class BArray(object):
 class Bloom(object):
     ''' Probabilistic set membership testing'''
 
-    def __init__(self, size=None, n=None, err=0.01):
-        ''' `size` exact size in bits for underlying bitarray, or calculate
-        from the estimated number of entries `n` and desired error rate `err` '''
-        self.size, self.num_hashes = self.calc_params(size, n, err)
+    def __init__(self, k=4, fpr=0.01, n):
+        self.k = k
+        self.size = self.calc_params(k, fpr, n)
         self.barray = BArray(self.size)
         self.added = 0
 
@@ -118,7 +117,7 @@ class Bloom(object):
         key = tuple(ord(c) for c in key)
         hash1 = fnv1a_64(key)
         hash2 = fnv1a_64((hash1,) + key)
-        for i in range(self.num_hashes):
+        for i in range(self.k):
             yield (hash1 + i * hash2) % self.size
 
     def add(self, key):
@@ -127,20 +126,16 @@ class Bloom(object):
         return all(self.barray.set(pos) for pos in self._hasher(key))
 
     @staticmethod
-    def calc_params(size=None, n=None, err=None):
-        ''' Takes a size (in bits) or calculates one from the estimated
-        number of entries `n` and the desired error rate `e` '''
-        if size:
-            return (size, 7)
-        size = math.ceil((-n * math.log(err)) / math.log(2) ** 2)
-        num_hashes = math.ceil((size / n) * math.log(2))
-        return size, num_hashes
+    def calc_params(k, fpr, n):
+        ''' Calculate required size from the estimated number of entries `n`,
+        number of hashes `k`, and the desired false positive rate `fpr` '''
+        return ceil((log(k / fpr) / log(2, 2)) * n)
 
     @property
     def collision_probability(self):
         ''' Return a current estimate of the collision probability '''
-        return (1 - math.e ** (-self.num_hashes * self.added / self.size)) ** \
-            self.num_hashes
+        return (1 - math.e ** (-self.k * self.added / self.size)) ** \
+            self.k
 
     @property
     def bits_set(self):
@@ -151,11 +146,11 @@ class Bloom(object):
 class CountingBloom(object):
     ''' Probabilistic set membership testing with count estimation '''
 
-    def __init__(self, size=None, n=None, err=0.01, bucketsize='B'):
+    def __init__(self, size=None, n=None, fpr=0.01, bucketsize='B'):
         ''' `size` exact number of buckets for underlying array, or calculate
         from the estimated number of entries `n`, desired error rate `err`, and
         required bucket size `bucketsize` '''
-        self.size, self.num_hashes = self.calc_params(size, n, err)
+        self.size, self.k = self.calc_params(size, n, fpr)
         self.barray = array(bucketsize, [0]) * self.size
         self.bucketsize = 2 ** (8 * calcsize(bucketsize)) - 1
         self.added = 0
@@ -192,7 +187,7 @@ class CountingBloom(object):
         key = tuple(ord(c) for c in key)
         hash1 = fnv1a_64(key)
         hash2 = fnv1a_64((hash1,) + key)
-        for i in range(self.num_hashes):
+        for i in range(self.k):
             yield (hash1 + i * hash2) % self.size
 
     def add(self, key):
@@ -210,22 +205,22 @@ class CountingBloom(object):
         return count
 
     @staticmethod
-    def calc_params(size=None, n=None, err=None):
+    def calc_params(size=None, n=None, fpr=None):
         ''' Takes a size (in bits) or calculates one from the estimated
         number of entries `n` and the desired error rate `e` '''
         if size:
             return (size, 7)
-        size = math.ceil((-n * math.log(err)) / math.log(2) ** 2)
-        num_hashes = math.ceil((size / n) * math.log(2))
-        return size, num_hashes
+        size = math.ceil((-n * math.log(fpr)) / math.log(2) ** 2)
+        k = math.ceil((size / n) * math.log(2))
+        return size, k
 
     @property
     def collision_probability(self):
         ''' Return a current estimate of the collision probability '''
-        return (1 - math.e ** (-self.num_hashes * self.added / self.size)) ** \
-            self.num_hashes
+        return (1 - math.e ** (-self.k * self.added / self.size)) ** \
+            self.k
 
     @property
     def buckets_set(self):
-        ''' Return the number of set bits in the filter '''
+        ''' Return the number of set buckets in the filter '''
         return sum([i != 0 for i in self.barray])
