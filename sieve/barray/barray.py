@@ -1,8 +1,9 @@
-# GY171114
+# GY171115
 
 import math
 from array import array
 from struct import calcsize
+from collections import defaultdict as dd
 
 from sieve.barray.hashes import fnv1a_64
 
@@ -163,21 +164,21 @@ class CountingBloom(object):
         return self.size
 
     def __iadd__(self, key):
-        for pos in self._hasher(key):
+        for bucket in self._hasher(key):
             try:
-                self.barray[pos] += 1
+                self.barray[bucket] += 1
             except OverflowError:
                 pass
         self.added += 1
         return self
 
     def __contains__(self, key):
-        return all(self.barray[pos] for pos in self._hasher(key))
+        return all(self.barray[bucket] for bucket in self._hasher(key))
 
     def __getitem__(self, key):
         count = self.bucketsize
-        for pos in self._hasher(key):
-            current = self.barray[pos]
+        for bucket in self._hasher(key):
+            current = self.barray[bucket]
             if current == 0:
                 return 0
             if current < count:
@@ -198,15 +199,15 @@ class CountingBloom(object):
         ''' Add item to the filter, returning its new count '''
         self.added += 1
         count = self.bucketsize
-        try:
-            for bucket in self._hasher(key):
+        for bucket in self._hasher(key):
+            try:
                 self.barray[bucket] += 1
                 bucketcount = self.barray[bucket]
                 if bucketcount < count:
                     count = bucketcount
-        except OverflowError:
-            pass
-        return bucketcount
+            except OverflowError:
+                pass
+        return count
 
     @staticmethod
     def calc_params(size=None, n=None, err=None):
