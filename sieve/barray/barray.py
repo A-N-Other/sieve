@@ -1,4 +1,4 @@
-# GY171115
+# GY171116
 
 import math
 from array import array
@@ -123,19 +123,18 @@ class Bloom(object):
     def add(self, key):
         ''' Add item to the filter, returning if already present as boolean '''
         self.added += 1
-        return all(self.barray.set(pos) for pos in self._hasher(key))
+        return all([self.barray.set(pos) for pos in self._hasher(key)])
 
     @staticmethod
     def calc_params(k, fpr, n):
         ''' Calculate required size from the estimated number of entries `n`,
         number of hashes `k`, and the desired false positive rate `fpr` '''
-        return ceil((log(k / fpr) / log(2, 2)) * n)
+        return math.ceil((math.log(k / fpr) / math.log(2, 2)) * n)
 
     @property
     def collision_probability(self):
         ''' Return a current estimate of the collision probability '''
-        return (1 - math.e ** (-self.k * self.added / self.size)) ** \
-            self.k
+        return (1 - math.e ** (-self.k * self.added / self.size)) ** self.k
 
     @property
     def bits_set(self):
@@ -146,11 +145,9 @@ class Bloom(object):
 class CountingBloom(object):
     ''' Probabilistic set membership testing with count estimation '''
 
-    def __init__(self, size=None, n=None, fpr=0.01, bucketsize='B'):
-        ''' `size` exact number of buckets for underlying array, or calculate
-        from the estimated number of entries `n`, desired error rate `err`, and
-        required bucket size `bucketsize` '''
-        self.size, self.k = self.calc_params(size, n, fpr)
+    def __init__(self, k=4, fpr=0.01, bucketsize='B', n):
+        self.k = k
+        self.size = self.calc_params(k, fpr, n)
         self.barray = array(bucketsize, [0]) * self.size
         self.bucketsize = 2 ** (8 * calcsize(bucketsize)) - 1
         self.added = 0
@@ -192,7 +189,6 @@ class CountingBloom(object):
 
     def add(self, key):
         ''' Add item to the filter, returning its new count '''
-        self.added += 1
         count = self.bucketsize
         for bucket in self._hasher(key):
             try:
@@ -202,23 +198,19 @@ class CountingBloom(object):
                     count = bucketcount
             except OverflowError:
                 pass
+        self.added += 1
         return count
 
     @staticmethod
-    def calc_params(size=None, n=None, fpr=None):
-        ''' Takes a size (in bits) or calculates one from the estimated
-        number of entries `n` and the desired error rate `e` '''
-        if size:
-            return (size, 7)
-        size = math.ceil((-n * math.log(fpr)) / math.log(2) ** 2)
-        k = math.ceil((size / n) * math.log(2))
-        return size, k
+    def calc_params(k, fpr, n):
+        ''' Calculate required size from the estimated number of entries `n`,
+        number of hashes `k`, and the desired false positive rate `fpr` '''
+        return math.ceil((math.log(k / fpr) / math.log(2, 2)) * n)
 
     @property
     def collision_probability(self):
         ''' Return a current estimate of the collision probability '''
-        return (1 - math.e ** (-self.k * self.added / self.size)) ** \
-            self.k
+        return (1 - math.e ** (-self.k * self.added / self.size)) ** self.k
 
     @property
     def buckets_set(self):
