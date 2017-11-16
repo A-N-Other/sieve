@@ -92,7 +92,7 @@ class BArray(object):
 class Bloom(object):
     ''' Probabilistic set membership testing'''
 
-    def __init__(self, k=4, fpr=0.01, n):
+    def __init__(self, n, k=4, fpr=0.01):
         self.k = k
         self.size = self.calc_params(k, fpr, n)
         self.barray = BArray(self.size)
@@ -145,7 +145,7 @@ class Bloom(object):
 class CountingBloom(object):
     ''' Probabilistic set membership testing with count estimation '''
 
-    def __init__(self, k=4, fpr=0.01, bucketsize='B', n):
+    def __init__(self, n, k=4, fpr=0.01, bucketsize='B'):
         self.k = k
         self.size = self.calc_params(k, fpr, n)
         self.barray = array(bucketsize, [0]) * self.size
