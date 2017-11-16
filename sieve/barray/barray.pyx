@@ -1,22 +1,29 @@
 # GY171116
 
 import math
-from array import array
+from cpython cimport array
+import array
 from struct import calcsize
 from collections import defaultdict as dd
 
-from sieve.barray.hashes import fnv1a_64
+from sieve.barray.hashes import _fnv1a_64
 
 
 __all__ = ['BArray', 'Bloom', 'CountingBloom']
 
 
-class BArray(object):
+cpdef class BArray(object):
     ''' A pure-Python bitarray implementation '''
 
-    def __init__(self, size):
+    cdef array.array empty_barray = array.array('Q', [])
+
+    cpdef __init__(self, unsigned long long size):
+        # Cython defs
+        cpdef unsigned long long self.size
+        cpdef array.array self.barray
+        #
         self.size = size
-        self.barray = array('Q', [0]) * math.ceil(size / 64)
+        self.barray = array.clone(empty_barray, math.ceil(size / 64), zero=True)
 
     def __getitem__(self, index):
         word, bit = self._getindex(index)
@@ -114,9 +121,8 @@ class Bloom(object):
         ''' Compute the bit indeces of a key for k hash functions, cheating by
         using permutations of a single hash algorithm, as per Kirsch &
         Mitzenmacher ... doi:10.1007/11841036_42 '''
-        key = tuple(ord(c) for c in key)
-        hash1 = fnv1a_64(key)
-        hash2 = fnv1a_64((hash1,) + key)
+        hash1 = _fnv1a_64(key)
+        hash2 = _fnv1a_64(key, hash1)
         for i in range(self.k):
             yield (hash1 + i * hash2) % self.size
 
@@ -182,8 +188,8 @@ class CountingBloom(object):
         using permutations of a single hash algorithm, as per Kirsch &
         Mitzenmacher ... doi:10.1007/11841036_42 '''
         key = tuple(ord(c) for c in key)
-        hash1 = fnv1a_64(key)
-        hash2 = fnv1a_64((hash1,) + key)
+        hash1 = _fnv1a_64(key)
+        hash2 = _fnv1a_64((hash1,) + key)
         for i in range(self.k):
             yield (hash1 + i * hash2) % self.size
 
