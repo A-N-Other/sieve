@@ -4,11 +4,13 @@ import math
 from array import array
 from struct import calcsize
 
+
 __all__ = ['BArray', 'Bloom', 'CountingBloom']
 
 
 def _fnv1a_64(key, seed=0):
-    ''' 64 bit Implementation of the Fowler–Noll–Vo 1a hash function '''
+    ''' 64 bit implementation of the Fowler–Noll–Vo 1a hash function modified
+    to take a seed value '''
     fnv1a_prime = 0x100000001b3
     hashresult = 0xcbf29ce484222325
     MASK = 0xffffffffffffffff
@@ -134,7 +136,7 @@ class Bloom(object):
         self.added += 1
         return all([self.barray.set(pos) for pos in self._hasher(key)])
 
-    def calc_params(k, fpr, n):
+    def calc_params(self, k, fpr, n):
         ''' Calculate required size from the estimated number of entries `n`,
         number of hashes `k`, and the desired false positive rate `fpr` '''
         return math.ceil((math.log(k / fpr) / math.log(2, 2)) * n)
@@ -206,7 +208,7 @@ class CountingBloom(object):
         self.added += 1
         return count
 
-    def calc_params(k, fpr, n):
+    def calc_params(self, k, fpr, n):
         ''' Calculate required size from the estimated number of entries `n`,
         number of hashes `k`, and the desired false positive rate `fpr` '''
         return math.ceil((math.log(k / fpr) / math.log(2, 2)) * n)

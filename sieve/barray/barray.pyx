@@ -4,6 +4,8 @@ import math
 import array
 from cpython cimport array
 
+import cython
+
 
 __all__ = ['BArray', 'Bloom', 'CountingBloom']
 
@@ -37,7 +39,9 @@ cdef class BArray(object):
         self.size = size
         self.barray = array.clone(empty_barray, math.ceil(size / 64), zero=True)
 
-    def __getitem__(self, unsigned long long index):
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    def __getitem__(self, signed long long index):
         cdef:
             unsigned long long word, mask
             unsigned char bit
@@ -47,7 +51,9 @@ cdef class BArray(object):
             return 1
         return 0
 
-    def __setitem__(self, unsigned long long index, bint value):
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
+    def __setitem__(self, signed long long index, bint value):
         cdef:
             unsigned long long word, mask
             unsigned char bit
@@ -61,14 +67,14 @@ cdef class BArray(object):
     def __len__(self):
         return self.size
 
-    cdef _getindex(self, unsigned long long index):
+    cdef _getindex(self, signed long long index):
         if index < 0:
             index += self.size
         if not 0 <= index < self.size:
             raise IndexError('Attempt to access out of bounds bit')
         return divmod(index, 64)
 
-    cpdef set(self, unsigned long long index):
+    cpdef set(self, signed long long index):
         ''' Sets a bit, returning if already set as boolean'''
         cdef:
             unsigned long long word, mask
@@ -80,7 +86,7 @@ cdef class BArray(object):
         self.barray[word] |= mask
         return False
 
-    cpdef unset(self, unsigned long long index):
+    cpdef unset(self, signed long long index):
         ''' Unsets a bit, returning if already unset as boolean '''
         cdef:
             unsigned long long word, mask
@@ -92,7 +98,7 @@ cdef class BArray(object):
         self.barray[word] &= ~mask
         return False
 
-    cpdef blockset(self, unsigned long long index, unsigned long long mask):
+    cpdef blockset(self, signed long long index, unsigned long long mask):
         ''' Sets bits in a block, returning if already set as boolean '''
         cdef:
             unsigned long long word
@@ -103,7 +109,7 @@ cdef class BArray(object):
         self.barray[word] |= mask
         return False
 
-    cpdef blockunset(self, unsigned long long index, unsigned long long mask):
+    cpdef blockunset(self, signed long long index, unsigned long long mask):
         ''' Unsets bits in a block, returning if already unset as boolean '''
         cdef:
             unsigned long long word
@@ -146,6 +152,8 @@ cdef class Bloom(object):
     def __len__(self):
         return self.size
 
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
     def __iadd__(self, bytes key):
         cdef:
             unsigned long long pos
@@ -154,6 +162,8 @@ cdef class Bloom(object):
         self.added += 1
         return self
 
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
     def __contains__(self, bytes key):
         cdef:
             unsigned long long pos
@@ -224,6 +234,8 @@ cdef class CountingBloom(object):
     def __len__(self):
         return self.size
 
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
     def __iadd__(self, bytes key):
         cdef:
             unsigned long long bucket
@@ -235,11 +247,15 @@ cdef class CountingBloom(object):
         self.added += 1
         return self
 
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
     def __contains__(self, bytes key):
         cdef:
             unsigned long long bucket
         return all(self.barray[bucket] for bucket in self._hasher(key))
 
+    @cython.boundscheck(False)
+    @cython.wraparound(False)
     def __getitem__(self, bytes key):
         cdef:
             unsigned long long bucket, count
