@@ -1,10 +1,11 @@
 # GY171117
 
-import math
+
 import array
+import math
 from cpython cimport array
 
-import cython
+cimport cython
 
 
 __all__ = ['BArray', 'Bloom', 'CountingBloom']
