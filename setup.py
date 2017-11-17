@@ -10,7 +10,7 @@ if not maxsize > 2**32:
     raise('Sieve requires compilation with a 64-bit Python3 / PyPy3 build')
 
 setup(
-    ext_modules=cythonize('sieve/barray/barray.pyx')
+    ext_modules=cythonize(['sieve/barray/barray.pyx'])
 )
 
 

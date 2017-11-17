@@ -130,10 +130,8 @@ cdef class BArray(object):
     cpdef unsigned long long count(self):
         ''' Count number of set bits '''
         cdef:
-            unsigned long long count=0
-        for word in self.barray:
-            count += self._count(word)
-        return count
+            unsigned long long word
+        return sum([self._count(word) for word in self.barray])
 
 
 cdef class Bloom(object):
@@ -170,7 +168,7 @@ cdef class Bloom(object):
             unsigned long long pos
         return all(self.barray[pos] for pos in self._hasher(key))
 
-    cdef _hasher(self, bytes key):
+    cdef tuple _hasher(self, bytes key):
         ''' Compute the bit indeces of a key for k hash functions, cheating by
         using permutations of a single hash algorithm, as per Kirsch &
         Mitzenmacher ... doi:10.1007/11841036_42 '''
@@ -181,7 +179,7 @@ cdef class Bloom(object):
         hash2 = _fnv1a_64(key, hash1)
         return tuple((hash1 + i * hash2) % self.size for i in range(self.k))
 
-    cpdef add(self, bytes key):
+    cpdef bint add(self, bytes key):
         ''' Add item to the filter, returning if already present as boolean '''
         cdef:
             unsigned long long pos
