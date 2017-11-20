@@ -1,0 +1,3 @@
+[submodule "external/seqtk"]
+	path = external/seqtk
+	url = git:lh3/seqtk.git
