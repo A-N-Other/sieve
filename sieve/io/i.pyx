@@ -30,7 +30,7 @@ cdef class MultiReader(object):
         ks.gzFile _filehandle
         ks.kseq_t* _ks
 
-    def __cinit__(self, char* filename):
+    def __init__(self, bytes filename):
        self._filehandle = ks.gzopen(filename, 'r')
        self._ks = ks.kseq_init(self._filehandle)
 
@@ -55,9 +55,6 @@ cdef class MultiReader(object):
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.close()
-
-    def __dealloc__(self):
-       self.close()
 
     def close(self):
         ks.kseq_destroy(self._ks)

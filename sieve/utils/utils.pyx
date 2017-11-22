@@ -1,21 +1,13 @@
-# GY171117
+# GY171122
 
 import math
-
 cimport cython
 
 
+__all__ = ['iterkmers', 'canonical']
+
+
 trans = bytes.maketrans(b'ATCG', b'TAGC')
-
-
-@cython.boundscheck(False)
-@cython.wraparound(False)
-def grouper(bytes bytestring, unsigned char k):
-    ''' Yields a bytestring in chunks of length k '''
-    cdef:
-        unsigned long long i
-    for i in range(math.ceil(len(bytestring) / k)):
-        yield bytestring[i*k:i*k+k]
 
 
 @cython.boundscheck(False)
