@@ -1,4 +1,6 @@
-# GY171120
+# GY171123
+
+#cython: language_level=3, boundscheck=False, wraparound=False, nonecheck=False
 
 __all__ = ['SeqRecord']
 

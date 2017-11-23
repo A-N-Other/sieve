@@ -1,7 +1,9 @@
-# GY171122
+# GY171123
+
+#cython: language_level=3, boundscheck=False, wraparound=False, nonecheck=False
 
 from sieve.structures import SeqRecord
-cimport ks
+from sieve.io cimport ks
 
 
 __all__ = ['MultiReader']

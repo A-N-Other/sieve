@@ -4,15 +4,11 @@ cdef extern from 'zlib.h':
     void gzclose(gzFile f)
 
 cdef extern from 'ks.h':
-    ctypedef struct kstream_t:
-        pass
     ctypedef struct kstring_t:
-        size_t l, m
+        size_t l
         char *s
     ctypedef struct kseq_t:
         kstring_t name, comment, seq, qual
-        int last_char, is_fastq
-        kstream_t *f;
     kseq_t *kseq_init(gzFile fd)
     void kseq_destroy(kseq_t *ks)
     int kseq_read(kseq_t *seq)
