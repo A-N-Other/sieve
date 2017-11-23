@@ -1,10 +1,8 @@
 # GY171117
 
-
 import array
 import math
 from cpython cimport array
-
 cimport cython
 
 
@@ -38,11 +36,11 @@ cdef class BArray(object):
         cdef:
             array.array empty_barray = array.array('Q', [])
         self.size = size
-        self.barray = array.clone(empty_barray, math.ceil(size / 64), zero=True)
+        self.barray = array.clone(empty_barray, math.ceil(self.size / 64.0), zero=True)
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
-    def __getitem__(self, signed long long index):
+    def __getitem__(self, unsigned long long index):
         cdef:
             unsigned long long word, mask
             unsigned char bit
@@ -54,7 +52,7 @@ cdef class BArray(object):
 
     @cython.boundscheck(False)
     @cython.wraparound(False)
-    def __setitem__(self, signed long long index, bint value):
+    def __setitem__(self, unsigned long long index, bint value):
         cdef:
             unsigned long long word, mask
             unsigned char bit
@@ -68,14 +66,12 @@ cdef class BArray(object):
     def __len__(self):
         return self.size
 
-    cdef _getindex(self, signed long long index):
-        if index < 0:
-            index += self.size
+    cdef _getindex(self, unsigned long long index):
         if not 0 <= index < self.size:
             raise IndexError('Attempt to access out of bounds bit')
         return divmod(index, 64)
 
-    cpdef set(self, signed long long index):
+    cpdef set(self, unsigned long long index):
         ''' Sets a bit, returning if already set as boolean'''
         cdef:
             unsigned long long word, mask
@@ -87,7 +83,7 @@ cdef class BArray(object):
         self.barray[word] |= mask
         return False
 
-    cpdef unset(self, signed long long index):
+    cpdef unset(self, unsigned long long index):
         ''' Unsets a bit, returning if already unset as boolean '''
         cdef:
             unsigned long long word, mask
@@ -99,7 +95,7 @@ cdef class BArray(object):
         self.barray[word] &= ~mask
         return False
 
-    cpdef blockset(self, signed long long index, unsigned long long mask):
+    cpdef blockset(self, unsigned long long index, unsigned long long mask):
         ''' Sets bits in a block, returning if already set as boolean '''
         cdef:
             unsigned long long word
@@ -110,7 +106,7 @@ cdef class BArray(object):
         self.barray[word] |= mask
         return False
 
-    cpdef blockunset(self, signed long long index, unsigned long long mask):
+    cpdef blockunset(self, unsigned long long index, unsigned long long mask):
         ''' Unsets bits in a block, returning if already unset as boolean '''
         cdef:
             unsigned long long word
@@ -193,7 +189,7 @@ cdef class Bloom(object):
 
     cpdef double collision_probability(self):
         ''' Return a current estimate of the collision probability '''
-        return (1 - math.e ** (-self.k * self.added / self.size)) ** self.k
+        return (1 - math.e ** (-self.k * self.added / <double>self.size)) ** self.k
 
     cpdef unsigned long long bits_set(self):
         ''' Return the number of set bits in the filter '''
@@ -208,7 +204,7 @@ cdef class CountingBloom(object):
         readonly unsigned char k
         readonly unsigned long long size, added, bucketsize
 
-    def __init__(self, unsigned long long n, unsigned char k=4, double fpr=0.01, unsigned char bucketsize=1):
+    def __init__(self, unsigned long long n, unsigned char k=4, double fpr=0.01, unsigned long long bucketsize=1):
         cdef:
             array.array B = array.array('B', []) # 1 bytes (max 255)
             array.array H = array.array('H', []) # 2 bytes (max 65535)
@@ -216,7 +212,6 @@ cdef class CountingBloom(object):
             array.array Q = array.array('Q', []) # 8 bytes (max 18446744073709551615)
         self.k = k
         self.size = self._calc_size(k, fpr, n)
-        self.barray = array(bucketsize, [0]) * self.size
         if bucketsize == 1:
             self.barray = array.clone(B, self.size, zero=True)
         elif bucketsize == 2:
@@ -299,7 +294,7 @@ cdef class CountingBloom(object):
 
     cpdef double collision_probability(self):
         ''' Return a current estimate of the collision probability '''
-        return (1 - math.e ** (-self.k * self.added / self.size)) ** self.k
+        return (1 - math.e ** (-self.k * self.added / <double>self.size)) ** self.k
 
     cpdef unsigned long long buckets_set(self):
         ''' Return the number of set buckets in the filter '''
