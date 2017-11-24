@@ -1,4 +1,4 @@
-# GY171123
+# GY171124
 
 #cython: language_level=3, boundscheck=False, wraparound=False, nonecheck=False
 
@@ -156,7 +156,7 @@ cdef class Bloom(object):
         return all(self.barray[pos] for pos in self._hasher(key))
 
     cdef tuple _hasher(self, bytes key):
-        ''' Compute the bit indeces of a key for k hash functions, cheating by
+        ''' Compute the bit indices of a key for k hash functions, cheating by
         using permutations of a single hash algorithm, as per Kirsch &
         Mitzenmacher ... doi:10.1007/11841036_42 '''
         cdef:
@@ -191,30 +191,18 @@ cdef class CountingBloom(object):
     ''' Probabilistic set membership testing with count estimation '''
 
     cdef:
-        unsigned long long [:] barray
-        readonly unsigned char k
-        readonly unsigned long long size, added, bucketsize
+        unsigned char [:] barray
+        readonly unsigned char k, bucketsize
+        readonly unsigned long long size, added
 
-    def __init__(self, unsigned long long n, unsigned char k=4, double fpr=0.01, unsigned long long bucketsize=1):
+    def __init__(self, unsigned long long n, unsigned char k=4, double fpr=0.01):
         cdef:
-            array.array B = array.array('B', []) # 1 bytes (max 255)
-            array.array H = array.array('H', []) # 2 bytes (max 65535)
-            array.array L = array.array('L', []) # 4 bytes (max 4294967295)
-            array.array Q = array.array('Q', []) # 8 bytes (max 18446744073709551615)
+            array.array B = array.array('B', [])  # 1 byte (max 255)
         self.k = k
         self.size = self._calc_size(k, fpr, n)
-        if bucketsize == 1:
-            self.barray = array.clone(B, self.size, zero=True)
-        elif bucketsize == 2:
-            self.barray = array.clone(H, self.size, zero=True)
-        elif bucketsize == 4:
-            self.barray = array.clone(L, self.size, zero=True)
-        elif bucketsize == 8:
-            self.barray = array.clone(Q, self.size, zero=True)
-        else:
-            raise ValueError('Only bucketsizes of 1, 2, 4, and 8 are supported')
-        self.bucketsize = 2 ** (bucketsize * 8) - 1
+        self.barray = array.clone(B, self.size, zero=True)
         self.added = 0
+        self.bucketsize = 255
 
     def __len__(self):
         return self.size
@@ -246,8 +234,8 @@ cdef class CountingBloom(object):
                 count = self.barray[bucket]
         return count
 
-    cdef unsigned long long _hasher(self, bytes key):
-        ''' Compute the bit indeces of a key for k hash functions, cheating by
+    cdef tuple _hasher(self, bytes key):
+        ''' Compute the bit indices of a key for k hash functions, cheating by
         using permutations of a single hash algorithm, as per Kirsch &
         Mitzenmacher ... doi:10.1007/11841036_42 '''
         cdef:
