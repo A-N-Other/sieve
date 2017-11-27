@@ -18,7 +18,7 @@ cdef inline bytes _get_comment(ks.kseq_t* _ks):
 
 
 cdef inline bytes _get_seq(ks.kseq_t* _ks):
-    return _ks.seq.s[:_ks.seq.l]
+    return _ks.seq.s[:_ks.seq.l].upper()
 
 
 cdef inline bytes _get_qual(ks.kseq_t* _ks):

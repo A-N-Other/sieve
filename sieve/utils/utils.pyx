@@ -6,7 +6,7 @@
 __all__ = ['canonical']
 
 
-trans = bytes.maketrans(b'ATCG', b'TAGC')
+trans = bytes.maketrans(b'ATUCGNRYWSKMDVHB-.', b'TAAGCNYRWSMKHBDV-.')
 
 
 cpdef bytes canonical(bytes bytestring):
