@@ -3,18 +3,10 @@
 #cython: language_level=3, boundscheck=False, wraparound=False, nonecheck=False
 
 
-__all__ = ['iterkmers', 'canonical']
+__all__ = ['canonical']
 
 
 trans = bytes.maketrans(b'ATCG', b'TAGC')
-
-
-def iterkmers(bytes bytestring, unsigned char k, unsigned char step=1):
-    ''' Yields all possible kmers of length k from a bytestring '''
-    cdef:
-        unsigned long long i
-    for i in range(0, len(bytestring) - k + 1, step):
-        yield bytestring[i:i+k]
 
 
 cpdef bytes canonical(bytes bytestring):

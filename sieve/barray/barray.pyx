@@ -17,7 +17,7 @@ cdef unsigned long long _fnv1a_64(bytes key, unsigned long long seed=0):
     cdef:
         unsigned long long hashresult = 0xcbf29ce484222325
         unsigned long long fnv1a_prime = 0x100000001b3
-        char c
+        unsigned char c
     if seed:
         hashresult ^= seed
         hashresult *= fnv1a_prime
@@ -57,7 +57,7 @@ cdef class BArray(object):
     def __getitem__(self, index):
         return self._get(index)
 
-    cdef void set(self, unsigned long long index, bint value):
+    cdef void _set(self, unsigned long long index, bint value):
         cdef:
             unsigned long long word, mask
             unsigned char bit
@@ -153,13 +153,13 @@ cdef class Bloom(object):
         self.added += 1
         return present
 
-    cpdef void add_from(self, bytes bytestring, unsigned char k, unsigned long long step=1):
+    cpdef void add_from(self, bytes bytestring, unsigned char kmerlen, unsigned long long step=1):
         cdef:
             unsigned long long hash1, hash2, i
             unsigned char j
             bytes key
-        for i in range(0, len(bytestring) - k + 1, step):
-            key = canonical(bytestring[i:i+k])
+        for i in range(0, len(bytestring) - kmerlen + 1, step):
+            key = canonical(bytestring[i:i+kmerlen])
             hash1 = _fnv1a_64(key)
             hash2 = _fnv1a_64(key, hash1)
             for j in range(self.k):
@@ -250,13 +250,13 @@ cdef class CountingBloom(object):
         self.added += 1
         return count
 
-    cpdef void add_from(self, bytes bytestring, unsigned char k, unsigned long long step=1):
+    cpdef void add_from(self, bytes bytestring, unsigned char kmerlen, unsigned long long step=1):
         cdef:
             unsigned long long hash1, hash2, i, pos
             unsigned char j
             bytes key
-        for i in range(0, len(bytestring) - k + 1, step):
-            key = canonical(bytestring[i:i+k])
+        for i in range(0, len(bytestring) - kmerlen + 1, step):
+            key = canonical(bytestring[i:i+kmerlen])
             hash1 = _fnv1a_64(key)
             hash2 = _fnv1a_64(key, hash1)
             for j in range(self.k):
