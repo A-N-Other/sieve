@@ -1,19 +1,19 @@
-# GY171124
+# GY171127
 
 #cython: language_level=3, boundscheck=False, wraparound=False, nonecheck=False
 
 import array
 import math
 from cpython cimport array
-cimport cython
+
+from sieve.utils import canonical
 
 
 __all__ = ['BArray', 'Bloom', 'CountingBloom']
 
 
 cdef unsigned long long _fnv1a_64(bytes key, unsigned long long seed=0):
-    ''' 64 bit implementation of the Fowler–Noll–Vo 1a hash function modified
-    to take a seed value '''
+    ''' 64 bit Fowler–Noll–Vo 1a hash function modified to take a seed '''
     cdef:
         unsigned long long hashresult = 0xcbf29ce484222325
         unsigned long long fnv1a_prime = 0x100000001b3
@@ -43,7 +43,7 @@ cdef class BArray(object):
     def __len__(self):
         return self.size
 
-    def __getitem__(self, unsigned long long index):
+    cdef bint _get(self, unsigned long long index):
         cdef:
             unsigned long long word, mask
             unsigned char bit
@@ -51,10 +51,13 @@ cdef class BArray(object):
         bit = index % 64
         mask = 1 << bit
         if self.barray[word] & mask:
-            return 1
-        return 0
+            return True
+        return False
 
-    def __setitem__(self, unsigned long long index, bint value):
+    def __getitem__(self, index):
+        return self._get(index)
+
+    cdef void set(self, unsigned long long index, bint value):
         cdef:
             unsigned long long word, mask
             unsigned char bit
@@ -66,7 +69,10 @@ cdef class BArray(object):
         else:
             self.barray[word] &= ~mask
 
-    cpdef set(self, unsigned long long index):
+    def __setitem__(self, index, value):
+        self._set(index, value)
+
+    cpdef bint set_and_report(self, unsigned long long index, bint value):
         ''' Sets a bit, returning if already set as boolean'''
         cdef:
             unsigned long long word, mask
@@ -74,39 +80,11 @@ cdef class BArray(object):
         word = index // 64
         bit = index % 64
         mask = 1 << bit
-        if self.barray[word] & mask:
-            return True
-        self.barray[word] |= mask
-        return False
-
-    cpdef unset(self, unsigned long long index):
-        ''' Unsets a bit, returning if already unset as boolean '''
-        cdef:
-            unsigned long long word, mask
-            unsigned char bit
-        word = index // 64
-        bit = index % 64
-        mask = 1 << bit
-        if not self.barray[word] & mask:
-            return True
-        self.barray[word] &= ~mask
-        return False
-
-    cpdef blockset(self, unsigned long long index, unsigned long long mask):
-        ''' Sets bits in a block, returning if already set as boolean '''
-        cdef:
-            unsigned long long word
-        word = index // 64
-        if (self.barray[word] & mask) == mask:
-            return True
-        self.barray[word] |= mask
-        return False
-
-    cpdef blockunset(self, unsigned long long index, unsigned long long mask):
-        ''' Unsets bits in a block, returning if already unset as boolean '''
-        cdef:
-            unsigned long long word
-        word = index // 64
+        if value:
+            if self.barray[word] & mask:
+                return True
+            self.barray[word] |= mask
+            return False
         if not self.barray[word] & mask:
             return True
         self.barray[word] &= ~mask
@@ -121,12 +99,17 @@ cdef class BArray(object):
     cpdef unsigned long long count(self):
         ''' Count number of set bits '''
         cdef:
-            unsigned long long word
-        return sum([self._count(word) for word in self.barray])
+            unsigned long long word, bitsset=0
+        for word in self.barray:
+            bitsset += self._count(word)
+        return bitsset
 
 
 cdef class Bloom(object):
-    ''' Probabilistic set membership testing'''
+    ''' Probabilistic set membership testing
+
+    Speeds things up by using permutations of a single hash algorithm as per
+    Kirsch & Mitzenmacher (doi:10.1007/11841036_42) '''
 
     cdef:
         readonly unsigned char k
@@ -142,53 +125,80 @@ cdef class Bloom(object):
     def __len__(self):
         return self.size
 
-    def __iadd__(self, bytes key):
-        cdef:
-            unsigned long long pos
-        for pos in self._hasher(key):
-            self.barray[pos] = 1
-        self.added += 1
-        return self
-
-    def __contains__(self, bytes key):
-        cdef:
-            unsigned long long pos
-        return all(self.barray[pos] for pos in self._hasher(key))
-
-    cdef tuple _hasher(self, bytes key):
-        ''' Compute the bit indices of a key for k hash functions, cheating by
-        using permutations of a single hash algorithm, as per Kirsch &
-        Mitzenmacher ... doi:10.1007/11841036_42 '''
+    cdef Bloom _iadd(self, bytes key):
         cdef:
             unsigned long long hash1, hash2
             unsigned char i
         hash1 = _fnv1a_64(key)
         hash2 = _fnv1a_64(key, hash1)
-        return tuple((hash1 + i * hash2) % self.size for i in range(self.k))
+        for i in range(self.k):
+            self.barray._set((hash1 + i * hash2) % self.size, True)
+        self.added += 1
+        return self
 
-    cpdef bint add(self, bytes key):
+    def __iadd__(self, bytes key):
+        return self._iadd(key)
+
+    cpdef bint add_and_report(self, bytes key):
         ''' Add item to the filter, returning if already present as boolean '''
         cdef:
-            unsigned long long pos
+            unsigned long long hash1, hash2
+            unsigned char i
+            bint present=True
+        hash1 = _fnv1a_64(key)
+        hash2 = _fnv1a_64(key, hash1)
+        for i in range(self.k):
+            if not self.barray.set_and_report((hash1 + i * hash2) % self.size, True):
+                present = False
         self.added += 1
-        return all([self.barray.set(pos) for pos in self._hasher(key)])
+        return present
 
-    cdef unsigned long long _calc_size(self, unsigned char k, double fpr, unsigned long long n):
+    cpdef void add_from(self, bytes bytestring, unsigned char k, unsigned long long step=1):
+        cdef:
+            unsigned long long hash1, hash2, i
+            unsigned char j
+            bytes key
+        for i in range(0, len(bytestring) - k + 1, step):
+            key = canonical(bytestring[i:i+k])
+            hash1 = _fnv1a_64(key)
+            hash2 = _fnv1a_64(key, hash1)
+            for j in range(self.k):
+                self.barray._set((hash1 + j * hash2) % self.size, True)
+            self.added += 1
+
+    cdef bint _contains(self, bytes key):
+        cdef:
+            unsigned long long hash1, hash2
+            unsigned char i
+        hash1 = _fnv1a_64(key)
+        hash2 = _fnv1a_64(key, hash1)
+        for i in range(self.k):
+            if not self.barray._get((hash1 + i * hash2) % self.size):
+                return False
+        return True
+
+    def __contains__(self, bytes key):
+        return self._contains(key)
+
+    def _calc_size(self, k, fpr, n):
         ''' Calculate required size from the estimated number of entries `n`,
         number of hashes `k`, and the desired false positive rate `fpr` '''
         return math.ceil((math.log(k / fpr) / math.log(2, 2)) * n)
 
-    cpdef double collision_probability(self):
+    def collision_probability(self):
         ''' Return a current estimate of the collision probability '''
-        return (1 - math.e ** (-self.k * self.added / <double>self.size)) ** self.k
+        return (1 - math.e ** (-self.k * self.added / self.size)) ** self.k
 
-    cpdef unsigned long long bits_set(self):
+    def count(self):
         ''' Return the number of set bits in the filter '''
         return self.barray.count()
 
 
 cdef class CountingBloom(object):
-    ''' Probabilistic set membership testing with count estimation '''
+    ''' Probabilistic set membership testing with count estimation
+
+    Speeds things up by using permutations of a single hash algorithm as per
+    Kirsch & Mitzenmacher (doi:10.1007/11841036_42) '''
 
     cdef:
         unsigned char [:] barray
@@ -207,70 +217,100 @@ cdef class CountingBloom(object):
     def __len__(self):
         return self.size
 
-    def __iadd__(self, bytes key):
+    cdef CountingBloom _iadd(self, bytes key):
         cdef:
-            unsigned long long bucket
-        for bucket in self._hasher(key):
-            try:
-                self.barray[bucket] += 1
-            except OverflowError:
-                pass
+            unsigned long long hash1, hash2, pos
+            unsigned char i
+        hash1 = _fnv1a_64(key)
+        hash2 = _fnv1a_64(key, hash1)
+        for i in range(self.k):
+            pos = (hash1 + i * hash2) % self.size
+            if self.barray[pos] != self.bucketsize:
+                self.barray[pos] += 1
         self.added += 1
         return self
 
-    def __contains__(self, bytes key):
-        cdef:
-            unsigned long long bucket
-        return all(self.barray[bucket] for bucket in self._hasher(key))
+    def __iadd__(self, bytes key):
+        return self._iadd(key)
 
-    def __getitem__(self, bytes key):
+    cpdef unsigned char add_and_report(self, bytes key):
+        ''' Add item to the filter, returning its new count '''
         cdef:
-            unsigned long long bucket, count
+            unsigned long long hash1, hash2, pos
+            unsigned char i, count
         count = self.bucketsize
-        for bucket in self._hasher(key):
-            if self.barray[bucket] == 0:
-                return 0
-            if self.barray[bucket] < count:
-                count = self.barray[bucket]
+        hash1 = _fnv1a_64(key)
+        hash2 = _fnv1a_64(key, hash1)
+        for i in range(self.k):
+            pos = (hash1 + i * hash2) % self.size
+            if self.barray[pos] != self.bucketsize:
+                self.barray[pos] += 1
+            if self.barray[pos] < count:
+                count = self.barray[pos]
+        self.added += 1
         return count
 
-    cdef tuple _hasher(self, bytes key):
-        ''' Compute the bit indices of a key for k hash functions, cheating by
-        using permutations of a single hash algorithm, as per Kirsch &
-        Mitzenmacher ... doi:10.1007/11841036_42 '''
+    cpdef void add_from(self, bytes bytestring, unsigned char k, unsigned long long step=1):
+        cdef:
+            unsigned long long hash1, hash2, i, pos
+            unsigned char j
+            bytes key
+        for i in range(0, len(bytestring) - k + 1, step):
+            key = canonical(bytestring[i:i+k])
+            hash1 = _fnv1a_64(key)
+            hash2 = _fnv1a_64(key, hash1)
+            for j in range(self.k):
+                pos = (hash1 + j * hash2) % self.size
+                if self.barray[pos] != self.bucketsize:
+                    self.barray[pos] += 1
+            self.added += 1
+
+    cdef bint _contains(self, bytes key):
         cdef:
             unsigned long long hash1, hash2
             unsigned char i
         hash1 = _fnv1a_64(key)
         hash2 = _fnv1a_64(key, hash1)
-        return tuple((hash1 + i * hash2) % self.size for i in range(self.k))
+        for i in range(self.k):
+            if not self._get((hash1 + i * hash2) % self.size):
+                return False
+        return True
 
-    cpdef add(self, bytes key):
-        ''' Add item to the filter, returning its new count '''
+    def __contains__(self, bytes key):
+        return self._contains(key)
+
+    cdef unsigned char _get(self, bytes key):
         cdef:
-            unsigned long long bucket, count
+            unsigned long long hash1, hash2, count, pos
+            unsigned char i
         count = self.bucketsize
-        for bucket in self._hasher(key):
-            try:
-                self.barray[bucket] += 1
-                if self.barray[bucket] < count:
-                    count = self.barray[bucket]
-            except OverflowError:
-                pass
-        self.added += 1
+        hash1 = _fnv1a_64(key)
+        hash2 = _fnv1a_64(key, hash1)
+        for i in range(self.k):
+            pos = (hash1 + i * hash2) % self.size
+            if not self.barray[pos]:
+                return 0
+            if self.barray[pos] < count:
+                count = self.barray[pos]
         return count
 
-    cdef unsigned long long _calc_size(self, unsigned char k, double fpr, unsigned long long n):
+    def __getitem__(self, bytes key):
+        return self._get(key)
+
+    def _calc_size(self, k, fpr, n):
         ''' Calculate required size from the estimated number of entries `n`,
         number of hashes `k`, and the desired false positive rate `fpr` '''
         return math.ceil((math.log(k / fpr) / math.log(2, 2)) * n)
 
-    cpdef double collision_probability(self):
+    def collision_probability(self):
         ''' Return a current estimate of the collision probability '''
-        return (1 - math.e ** (-self.k * self.added / <double>self.size)) ** self.k
+        return (1 - math.e ** (-self.k * self.added / self.size)) ** self.k
 
-    cpdef unsigned long long buckets_set(self):
+    cpdef unsigned long long count(self):
         ''' Return the number of set buckets in the filter '''
         cdef:
-            unsigned long long bucket
-        return sum([bucket != 0 for bucket in self.barray])
+            unsigned long long word, bucketsset=0
+        for word in self.barray:
+            if word:
+                bucketsset += 1
+        return bucketsset

@@ -1,9 +1,6 @@
-# GY171123
+# GY171127
 
 #cython: language_level=3, boundscheck=False, wraparound=False, nonecheck=False
-
-import math
-cimport cython
 
 
 __all__ = ['iterkmers', 'canonical']
@@ -20,7 +17,10 @@ def iterkmers(bytes bytestring, unsigned char k, unsigned char step=1):
         yield bytestring[i:i+k]
 
 
-cpdef canonical(bytes bytestring, unsigned char pos=0):
+cpdef bytes canonical(bytes bytestring):
+    cdef:
+        unsigned char pos
+    pos = (len(bytestring) + 1) // 2
     return bytestring[::-1].translate(trans) \
         if (bytestring[pos] == 84 or bytestring[pos] == 71) \
         else bytestring
