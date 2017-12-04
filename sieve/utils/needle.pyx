@@ -1,6 +1,9 @@
+# GY171204
+
+#cython: language_level=3, boundscheck=False, wraparound=False, nonecheck=False
+
 import numpy as np
 cimport numpy as np
-cimport cython
 
 
 __all__ = ['nw']
