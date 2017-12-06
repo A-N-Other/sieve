@@ -1,4 +1,4 @@
-# GY171204
+# GY171206
 
 #cython: language_level=3, boundscheck=False, wraparound=False, nonecheck=False
 
@@ -6,7 +6,8 @@ import numpy as np
 cimport numpy as np
 
 
-__all__ = ['nw']
+__all__ = ['nw', 'centerstar']
+
 
 ctypedef np.int_t DTYPE_INT
 ctypedef np.uint_t DTYPE_UINT
@@ -14,9 +15,9 @@ ctypedef np.int8_t DTYPE_BOOL
 ctypedef np.uint8_t DTYPE_UCHAR
 
 
-cpdef nw(bytes seqB, bytes seqA, int reward=1, int gap_open=-1, int gap_extend=-1):
+cpdef np.ndarray[DTYPE_UCHAR, ndim=2] nw(bytes seqA, bytes seqB, int match=1, int mismatch=-2, int gap_open=-4, int gap_extend=-1):
     cdef:
-        size_t i, b, p, pos = 0, UP = 1, LEFT = 2, DIAG = 3, NA = 4
+        size_t i, a, b, p, pos = 0, UP = 1, LEFT = 2, DIAG = 3, NA = 4
         int scoreDIAG, scoreUP, scoreLEFT
         np.ndarray[DTYPE_BOOL, ndim=1] gapA, gapB
         np.ndarray[DTYPE_INT, ndim=2] score
@@ -45,12 +46,9 @@ cpdef nw(bytes seqB, bytes seqA, int reward=1, int gap_open=-1, int gap_extend=-
         gapB[0] = 0
         for b in range(1, len(seqB)+1):
             gapB[b] = 1
-            if seqA[a-1] == seqB[b-1]:
-                scoreDIAG = score[a-1, b-1] + reward
-            else:
-                scoreDIAG = score[a-1, b-1] + (gap_extend if (gapA[a-1] and gapB[b-1]) else gap_open)
             scoreUP = score[a-1, b] + (gap_extend if gapA[a-1] else gap_open)
             scoreLEFT = score[a, b-1] + (gap_extend if gapB[b-1] else gap_open)
+            scoreDIAG = score[a-1, b-1] + (match if seqA[a-1] == seqB[b-1] else mismatch)
             if scoreDIAG >= scoreUP:
                 if scoreDIAG >= scoreLEFT:
                     score[a, b] = scoreDIAG
@@ -68,8 +66,8 @@ cpdef nw(bytes seqB, bytes seqA, int reward=1, int gap_open=-1, int gap_extend=-
                     score[a, b] = scoreLEFT
                     pointer[a, b] = LEFT
 
-    alignB = np.zeros(len(seqA) + len(seqB), dtype=np.uint8)
     alignA = np.zeros(len(seqA) + len(seqB), dtype=np.uint8)
+    alignB = np.zeros(len(seqA) + len(seqB), dtype=np.uint8)
 
     p = pointer[a, b]
     while p != NA:
@@ -91,4 +89,37 @@ cpdef nw(bytes seqB, bytes seqA, int reward=1, int gap_open=-1, int gap_extend=-
         pos += 1
         p = pointer[a, b]
 
-    return (np.trim_zeros(alignB)[::-1].tobytes(), np.trim_zeros(alignA)[::-1].tobytes())
+    return np.array([np.trim_zeros(alignA)[::-1], np.trim_zeros(alignB)[::-1]])
+
+
+cpdef np.ndarray centerstar(tuple seqs):
+    cdef:
+        np.ndarray[DTYPE_UCHAR, ndim=1] space = np.array([45], dtype=np.uint8)  # '-'
+        np.ndarray aln
+        np.ndarray[DTYPE_UCHAR, ndim=2] pair
+        size_t i = 0
+        bytes seq
+
+    aln = nw(seqs[0], seqs[1])
+    for seq in seqs[2:]:
+        pair = nw(seqs[0], seq)
+        while not np.array_equal(aln[0], pair[0]):
+            if i > len(aln[0]) - 1:
+                aln = np.insert(
+                    aln, [len(aln[0])],
+                    np.tile(space, len(pair[0]) - len(aln[0])), axis=1)
+                continue
+            if i > len(pair[1]) - 1:
+                pair = np.insert(
+                    pair, [len(pair[0])],
+                    np.tile(space, len(aln[0]) - len(pair[0])), axis=1)
+                continue
+            if aln[0,i] != pair[0][i]:
+                if aln[0,i] == 45:   # '-'
+                    pair = np.insert(pair, [i], space, axis=1)
+                elif pair[0,i] == 45:   # '-'
+                    aln = np.insert(aln, [i], space, axis=1)
+                # else aligned mismatch is fine
+            i += 1
+        aln = np.concatenate((aln, np.array(pair[1], copy=False, ndmin=2)))
+    return aln
