@@ -85,7 +85,7 @@ cpdef np.ndarray[DTYPE_UCHAR, ndim=2] nw(bytes seqA, bytes seqB, int match=1, in
             alignB[pos] = b'-'
             alignA[pos] = seqA[a]
         else:
-            raise ValueError
+            raise ValueError('Traceback failure')
         pos += 1
         p = pointer[a, b]
 
