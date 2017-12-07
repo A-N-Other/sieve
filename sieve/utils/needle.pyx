@@ -1,4 +1,4 @@
-# GY171206
+# GY171207
 
 #cython: language_level=3, boundscheck=False, wraparound=False, nonecheck=False
 
@@ -15,7 +15,7 @@ ctypedef np.int8_t DTYPE_BOOL
 ctypedef np.uint8_t DTYPE_UCHAR
 
 
-cpdef np.ndarray[DTYPE_UCHAR, ndim=2] nw(bytes seqA, bytes seqB, int match=1, int mismatch=-2, int gap_open=-4, int gap_extend=-1):
+cpdef np.ndarray[DTYPE_UCHAR, ndim=2] nw(bytes seqA, bytes seqB, int match=2, int mismatch=-3, int gap_open=-5, int gap_extend=-2):
     cdef:
         size_t i, a, b, p, pos = 0, UP = 1, LEFT = 2, DIAG = 3, NA = 4
         int scoreDIAG, scoreUP, scoreLEFT
@@ -97,12 +97,13 @@ cpdef np.ndarray centerstar(tuple seqs):
         np.ndarray[DTYPE_UCHAR, ndim=1] space = np.array([45], dtype=np.uint8)  # '-'
         np.ndarray aln
         np.ndarray[DTYPE_UCHAR, ndim=2] pair
-        size_t i = 0
+        size_t i
         bytes seq
 
     aln = nw(seqs[0], seqs[1])
     for seq in seqs[2:]:
         pair = nw(seqs[0], seq)
+        i = 0
         while not np.array_equal(aln[0], pair[0]):
             if i > len(aln[0]) - 1:
                 aln = np.insert(

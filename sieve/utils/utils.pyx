@@ -1,13 +1,11 @@
-# GY171130
+# GY171206
 
 #cython: language_level=3, boundscheck=False, wraparound=False, nonecheck=False
 
 from collections import deque
 
-import cython
 
-
-__all__ = ['seqhash', 'canonical', 'resemblance', 'containment']
+__all__ = ['seqhash', 'canonical', 'resemblance', 'containment', 'minimisers']
 
 
 trans = bytes.maketrans(b'ATUCGNRYWSKMDVHB-.', b'TAAGCNYRWSMKHBDV-.')
@@ -41,28 +39,29 @@ cpdef bytes canonical(bytes bytestring):
     return bytestringrc
 
 
-@cython.boundscheck(True)
-cdef long overlap(list a, list b):
+cpdef double resemblance(set a, set b):
+    return len(a & b) / ((len(a) + len(b)) / 2)
+
+
+cpdef double containment(set a, set b):
+    return len(a & b) / min(len(a), len(b))
+
+
+cpdef set minimisers(bytes bytestring, unsigned char k, unsigned char w):
     cdef:
-        long i = 0, j = 0
-        long common = 0
-    try:
-        while True:
-            while a[i] < b[j]:
-                i += 1
-            while a[i] > b[j]:
-                j += 1
-            if a[i] == b[j]:
-                common += 1
-                i += 1
-                j += 1
-    except IndexError:
-        return common
-
-
-cpdef double resemblance(list a, list b):
-    return overlap(a, b) / ((len(a) + len(b)) / 2)
-
-
-cpdef double containment(list a, list b):
-    return overlap(a, b) / min(len(a), len(b))
+        set minis = set()
+        size_t i
+        list m
+        unsigned long long h
+    d = deque(maxlen=w-k+1)
+    for i in range(w-k+1):
+        d.append(seqhash(canonical(bytestring[i:i+k])))
+    m = [h for h in d if h not in minis]
+    if m:
+        minis.add(min(m))
+    for i in range(w-k+1, len(bytestring)-k+1):
+        d.append(seqhash(canonical(bytestring[i:i+k])))
+        m = [h for h in d if h not in minis]
+        if m:
+            minis.add(min(m))
+    return minis
